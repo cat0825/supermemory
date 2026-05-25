@@ -29,9 +29,9 @@ export function HomeChatComposer({
 	className?: string
 }) {
 	const [input, setInput] = useState("")
-	const [attachmentDrafts, setAttachmentDrafts] = useState<ChatAttachmentDraft[]>(
-		[],
-	)
+	const [attachmentDrafts, setAttachmentDrafts] = useState<
+		ChatAttachmentDraft[]
+	>([])
 	const [selectedModel, setSelectedModel] = useState<ModelId>("gemini-2.5-pro")
 	const { selectedProject } = useProject()
 	const [chatSpaceProjects, setChatSpaceProjects] = useState<string[]>([

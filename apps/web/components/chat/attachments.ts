@@ -74,9 +74,7 @@ export function formatAttachmentSize(size: number): string {
 	return `${(kb / 1024).toFixed(1)} MB`
 }
 
-export function getChatMessageAttachments(
-	metadata: unknown,
-): ChatAttachment[] {
+export function getChatMessageAttachments(metadata: unknown): ChatAttachment[] {
 	const attachments = (metadata as ChatAttachmentMessageMetadata | undefined)
 		?.attachments
 	return Array.isArray(attachments) ? attachments : []

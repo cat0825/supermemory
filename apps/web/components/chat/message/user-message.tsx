@@ -3,10 +3,7 @@
 import { memo } from "react"
 import { Copy, Check, FileIcon } from "lucide-react"
 import type { UIMessage } from "@ai-sdk/react"
-import {
-	formatAttachmentSize,
-	getChatMessageAttachments,
-} from "../attachments"
+import { formatAttachmentSize, getChatMessageAttachments } from "../attachments"
 
 interface UserMessageProps {
 	message: UIMessage
@@ -30,7 +27,11 @@ export const UserMessage = memo(function UserMessage({
 			<div className="bg-[#1B1F24] rounded-[12px] p-3 px-[14px] max-w-[80%]">
 				{text ? <p className="text-sm text-white">{text}</p> : null}
 				{attachments.length > 0 ? (
-					<div className={text ? "mt-2 flex flex-col gap-1.5" : "flex flex-col gap-1.5"}>
+					<div
+						className={
+							text ? "mt-2 flex flex-col gap-1.5" : "flex flex-col gap-1.5"
+						}
+					>
 						{attachments.map((attachment) => (
 							<div
 								key={attachment.id}

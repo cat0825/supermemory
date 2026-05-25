@@ -156,9 +156,9 @@ export function ChatSidebar({
 	const isMobile = useIsMobile()
 	const isPageDesktop = layout === "page" && !isMobile
 	const [input, setInput] = useState("")
-	const [attachmentDrafts, setAttachmentDrafts] = useState<ChatAttachmentDraft[]>(
-		[],
-	)
+	const [attachmentDrafts, setAttachmentDrafts] = useState<
+		ChatAttachmentDraft[]
+	>([])
 	const [selectedModel, setSelectedModel] = useState<ModelId>(
 		initialSelectedModel ?? "claude-sonnet-4.6",
 	)
@@ -590,9 +590,7 @@ export function ChatSidebar({
 			analytics.chatSuggestedQuestionClicked()
 			void submitChatMessage(suggestion, "suggested", [])
 		},
-		[
-			submitChatMessage,
-		],
+		[submitChatMessage],
 	)
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -867,9 +865,7 @@ export function ChatSidebar({
 		selectedModel,
 		status,
 		onConsumeQueuedMessage,
-		fallbackChatId,
 		setThreadId,
-		threadId,
 		submitChatMessage,
 	])
 
