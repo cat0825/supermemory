@@ -7,15 +7,31 @@ import { useProject } from "@/stores"
 import { cn } from "@lib/utils"
 import type { ModelId } from "@/lib/models"
 import { SpaceSelector } from "@/components/space-selector"
+import { toast } from "sonner"
+import {
+	chatAttachmentKey,
+	CHAT_ATTACHMENT_ACCEPT,
+	createChatAttachmentDraft,
+	type ChatAttachmentDraft,
+	isAcceptedChatAttachment,
+} from "./attachments"
 
 export function HomeChatComposer({
 	onStartChat,
 	className,
 }: {
-	onStartChat: (message: string, model: ModelId, projectId: string) => void
+	onStartChat: (
+		message: string,
+		model: ModelId,
+		projectId: string,
+		attachments?: ChatAttachmentDraft[],
+	) => void
 	className?: string
 }) {
 	const [input, setInput] = useState("")
+	const [attachmentDrafts, setAttachmentDrafts] = useState<ChatAttachmentDraft[]>(
+		[],
+	)
 	const [selectedModel, setSelectedModel] = useState<ModelId>("gemini-2.5-pro")
 	const { selectedProject } = useProject()
 	const [chatSpaceProjects, setChatSpaceProjects] = useState<string[]>([
@@ -24,10 +40,76 @@ export function HomeChatComposer({
 
 	const send = useCallback(() => {
 		const t = input.trim()
-		if (!t) return
-		onStartChat(t, selectedModel, chatSpaceProjects[0] ?? selectedProject)
+		if (!t && attachmentDrafts.length === 0) return
+		onStartChat(
+			t,
+			selectedModel,
+			chatSpaceProjects[0] ?? selectedProject,
+			attachmentDrafts,
+		)
 		setInput("")
-	}, [chatSpaceProjects, input, onStartChat, selectedModel, selectedProject])
+		setAttachmentDrafts([])
+	}, [
+		attachmentDrafts,
+		chatSpaceProjects,
+		input,
+		onStartChat,
+		selectedModel,
+		selectedProject,
+	])
+
+	const handleAddAttachmentFiles = useCallback(
+		(files: FileList | File[]) => {
+			const incoming = Array.from(files)
+			const accepted = incoming.filter(isAcceptedChatAttachment)
+			const rejected = incoming.length - accepted.length
+			if (rejected > 0) {
+				toast.error(
+					rejected === 1
+						? "One attachment is not supported or is over 50MB"
+						: `${rejected} attachments are not supported or are over 50MB`,
+				)
+			}
+			if (accepted.length === 0) return
+
+			const existingKeys = new Set(
+				attachmentDrafts.map((item) => chatAttachmentKey(item.file)),
+			)
+			const nextItems: ChatAttachmentDraft[] = []
+			let duplicateCount = 0
+			for (const file of accepted) {
+				const key = chatAttachmentKey(file)
+				if (existingKeys.has(key)) {
+					duplicateCount++
+					continue
+				}
+				existingKeys.add(key)
+				nextItems.push(createChatAttachmentDraft(file))
+			}
+			if (duplicateCount > 0) {
+				toast.message(
+					duplicateCount === 1
+						? "Skipped duplicate attachment"
+						: `Skipped ${duplicateCount} duplicate attachments`,
+				)
+			}
+			if (nextItems.length === 0) return
+			setAttachmentDrafts((prev) => [...prev, ...nextItems])
+		},
+		[attachmentDrafts],
+	)
+
+	const handleRemoveAttachment = useCallback((id: string) => {
+		setAttachmentDrafts((prev) => prev.filter((item) => item.id !== id))
+	}, [])
+
+	const handleToggleAttachmentSave = useCallback((id: string) => {
+		setAttachmentDrafts((prev) =>
+			prev.map((item) =>
+				item.id === id ? { ...item, saveToMemory: !item.saveToMemory } : item,
+			),
+		)
+	}, [])
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -46,6 +128,12 @@ export function HomeChatComposer({
 					onStop={() => {}}
 					onKeyDown={handleKeyDown}
 					isResponding={false}
+					attachments={attachmentDrafts}
+					onAddAttachmentFiles={handleAddAttachmentFiles}
+					onRemoveAttachment={handleRemoveAttachment}
+					onToggleAttachmentSave={handleToggleAttachmentSave}
+					canSend={input.trim().length > 0 || attachmentDrafts.length > 0}
+					attachmentAccept={CHAT_ATTACHMENT_ACCEPT}
 					showStatusStrip={false}
 					stackedToolbar={
 						<>

@@ -1,12 +1,25 @@
 "use client"
 
-import { ChevronUpIcon } from "lucide-react"
+import {
+	CheckIcon,
+	ChevronUpIcon,
+	FileIcon,
+	Loader2Icon,
+	PaperclipIcon,
+	RotateCcwIcon,
+	XIcon,
+} from "lucide-react"
 import NovaOrb from "@/components/nova/nova-orb"
 import { cn } from "@lib/utils"
 import { dmSansClassName } from "@/lib/fonts"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { motion } from "motion/react"
 import { SendButton, StopButton } from "./actions"
+import {
+	CHAT_ATTACHMENT_ACCEPT,
+	type ChatAttachmentDraft,
+	formatAttachmentSize,
+} from "../attachments"
 
 interface ChatInputProps {
 	value: string
@@ -22,6 +35,13 @@ interface ChatInputProps {
 	stackedToolbar?: ReactNode
 	/** Nova status row + chain-of-thought toggle (off for e.g. home composer) */
 	showStatusStrip?: boolean
+	attachments?: ChatAttachmentDraft[]
+	onAddAttachmentFiles?: (files: FileList | File[]) => void
+	onRemoveAttachment?: (id: string) => void
+	onToggleAttachmentSave?: (id: string) => void
+	onRetryAttachment?: (id: string) => void
+	canSend?: boolean
+	attachmentAccept?: string
 }
 
 export default function ChatInput({
@@ -36,10 +56,18 @@ export default function ChatInput({
 	onExpandedChange,
 	stackedToolbar,
 	showStatusStrip = true,
+	attachments = [],
+	onAddAttachmentFiles,
+	onRemoveAttachment,
+	onToggleAttachmentSave,
+	onRetryAttachment,
+	canSend,
+	attachmentAccept = CHAT_ATTACHMENT_ACCEPT,
 }: ChatInputProps) {
 	const [isMultiline, setIsMultiline] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const fileInputRef = useRef<HTMLInputElement>(null)
 
 	useEffect(() => {
 		if (!showStatusStrip && isExpanded) {
@@ -60,6 +88,115 @@ export default function ChatInput({
 
 		setIsMultiline(textarea.scrollHeight > 52)
 	}
+
+	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = e.target.files
+		if (files?.length) onAddAttachmentFiles?.(files)
+		e.target.value = ""
+	}
+
+	const showAttachments = attachments.length > 0
+	const sendEnabled = canSend ?? value.trim().length > 0
+
+	const attachmentTray = showAttachments ? (
+		<div className="flex max-h-32 flex-col gap-1.5 overflow-y-auto px-1 pb-1">
+			{attachments.map((attachment) => {
+				const isUploading = attachment.status === "uploading"
+				const isUploaded = attachment.status === "uploaded"
+				const isError = attachment.status === "error"
+				return (
+					<div
+						key={attachment.id}
+						className={cn(
+							"flex min-w-0 items-center gap-2 rounded-lg border border-[#273244] bg-[#07111F]/80 px-2.5 py-2 text-xs text-[#A6B0BE]",
+							isError && "border-red-400/40 bg-red-950/20",
+						)}
+					>
+						<div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#101824]">
+							{isUploading ? (
+								<Loader2Icon className="size-3.5 animate-spin text-[#4BA0FA]" />
+							) : isUploaded ? (
+								<CheckIcon className="size-3.5 text-emerald-400" />
+							) : (
+								<FileIcon className="size-3.5 text-[#7E8BA0]" />
+							)}
+						</div>
+						<div className="min-w-0 flex-1">
+							<div className="truncate font-medium text-[#E8EDF5]">
+								{attachment.file.name}
+							</div>
+							<div className="truncate text-[11px] text-[#7E8BA0]">
+								{isError
+									? attachment.errorMessage || "Upload failed"
+									: formatAttachmentSize(attachment.file.size)}
+							</div>
+						</div>
+						<button
+							type="button"
+							onClick={() => onToggleAttachmentSave?.(attachment.id)}
+							disabled={isUploading || isUploaded}
+							className={cn(
+								"shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors",
+								attachment.saveToMemory
+									? "border-[#267BF1]/50 bg-[#267BF1]/15 text-[#8FC3FF]"
+									: "border-[#303949] bg-[#0B111A] text-[#7E8BA0]",
+								(isUploading || isUploaded) && "cursor-not-allowed opacity-60",
+							)}
+							title={
+								attachment.saveToMemory
+									? "Save this attachment to memories"
+									: "Use this attachment only in chat"
+							}
+						>
+							{attachment.saveToMemory ? "Save" : "Chat only"}
+						</button>
+						{isError ? (
+							<button
+								type="button"
+								onClick={() => onRetryAttachment?.(attachment.id)}
+								className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#A6B0BE] transition-colors hover:bg-[#182235] hover:text-white"
+								aria-label={`Retry ${attachment.file.name}`}
+							>
+								<RotateCcwIcon className="size-3.5" />
+							</button>
+						) : null}
+						<button
+							type="button"
+							onClick={() => onRemoveAttachment?.(attachment.id)}
+							disabled={isUploading}
+							className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#7E8BA0] transition-colors hover:bg-[#182235] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label={`Remove ${attachment.file.name}`}
+						>
+							<XIcon className="size-3.5" />
+						</button>
+					</div>
+				)
+			})}
+		</div>
+	) : null
+
+	const attachmentButton = onAddAttachmentFiles ? (
+		<>
+			<input
+				ref={fileInputRef}
+				type="file"
+				multiple
+				accept={attachmentAccept}
+				onChange={handleFileSelect}
+				className="hidden"
+			/>
+			<button
+				type="button"
+				onClick={() => fileInputRef.current?.click()}
+				disabled={isResponding}
+				className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-surface-border bg-surface-card text-[#A6B0BE] transition-colors hover:bg-surface-hover hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				aria-label="Attach files"
+				title="Attach files"
+			>
+				<PaperclipIcon className="size-4" />
+			</button>
+		</>
+	) : null
 
 	return (
 		<motion.div
@@ -130,6 +267,7 @@ export default function ChatInput({
 			) : null}
 			{stackedToolbar ? (
 				<div className="flex flex-col gap-2 rounded-xl bg-surface-card/60 backdrop-blur-md p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10">
+					{attachmentTray}
 					<textarea
 						ref={textareaRef}
 						value={value}
@@ -142,6 +280,7 @@ export default function ChatInput({
 						disabled={isResponding}
 					/>
 					<div className="flex items-center gap-2">
+						{attachmentButton}
 						<div className="flex min-w-0 flex-1 items-center gap-2">
 							{stackedToolbar}
 						</div>
@@ -149,7 +288,7 @@ export default function ChatInput({
 							{isResponding ? (
 								<StopButton onClick={onStop} />
 							) : (
-								<SendButton onClick={onSend} disabled={!value.trim()} />
+								<SendButton onClick={onSend} disabled={!sendEnabled} />
 							)}
 						</div>
 					</div>
@@ -157,10 +296,11 @@ export default function ChatInput({
 			) : (
 				<div
 					className={cn(
-						"flex items-end gap-2 rounded-xl bg-surface-card/60 backdrop-blur-md p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10",
+						"flex flex-col gap-2 rounded-xl bg-surface-card/60 backdrop-blur-md p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10",
 						isMultiline && "flex-col",
 					)}
 				>
+					{attachmentTray}
 					<textarea
 						ref={textareaRef}
 						value={value}
@@ -172,11 +312,12 @@ export default function ChatInput({
 						rows={1}
 						disabled={isResponding}
 					/>
-					<div className="transition-all duration-200">
+					<div className="flex w-full items-center justify-end gap-2 transition-all duration-200">
+						{attachmentButton}
 						{isResponding ? (
 							<StopButton onClick={onStop} />
 						) : (
-							<SendButton onClick={onSend} disabled={!value.trim()} />
+							<SendButton onClick={onSend} disabled={!sendEnabled} />
 						)}
 					</div>
 				</div>

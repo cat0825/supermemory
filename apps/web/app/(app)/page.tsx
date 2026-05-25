@@ -13,6 +13,7 @@ import { useQueryState } from "nuqs"
 import { Header, PublicHeader } from "@/components/header"
 import { MobileBottomNav } from "@/components/bottom-nav"
 import { ChatSidebar, HomeChatComposer } from "@/components/chat"
+import type { ChatAttachmentDraft } from "@/components/chat/attachments"
 import { DashboardView } from "@/components/dashboard-view"
 import { MemoriesGrid } from "@/components/memories-grid"
 import { GraphLayoutView } from "@/components/graph-layout-view"
@@ -164,6 +165,9 @@ export default function NewPage() {
 	const [queuedChatProject, setQueuedChatProject] = useState<string | null>(
 		null,
 	)
+	const [queuedChatAttachments, setQueuedChatAttachments] = useState<
+		ChatAttachmentDraft[] | null
+	>(null)
 	const [queuedHighlightContent, setQueuedHighlightContent] = useState<
 		string | null
 	>(null)
@@ -491,6 +495,7 @@ export default function NewPage() {
 			setQueuedChatSeed(userReply)
 			setQueuedChatModel(null)
 			setQueuedChatProject(null)
+			setQueuedChatAttachments(null)
 			setQueuedMessageSource("highlight")
 			void setViewMode("chat")
 		},
@@ -498,11 +503,17 @@ export default function NewPage() {
 	)
 
 	const handleHomeChatStart = useCallback(
-		(message: string, model: ModelId, projectId: string) => {
+		(
+			message: string,
+			model: ModelId,
+			projectId: string,
+			attachments?: ChatAttachmentDraft[],
+		) => {
 			setQueuedHighlightContent(null)
 			setQueuedChatSeed(message)
 			setQueuedChatModel(model)
 			setQueuedChatProject(projectId)
+			setQueuedChatAttachments(attachments ?? null)
 			setQueuedMessageSource("home")
 			void setViewMode("chat")
 		},
@@ -513,6 +524,7 @@ export default function NewPage() {
 		setQueuedChatSeed(null)
 		setQueuedChatModel(null)
 		setQueuedChatProject(null)
+		setQueuedChatAttachments(null)
 		setQueuedHighlightContent(null)
 		setQueuedMessageSource("highlight")
 	}, [])
@@ -632,6 +644,7 @@ export default function NewPage() {
 											queuedHighlightContent={queuedHighlightContent}
 											onConsumeQueuedMessage={consumeQueuedChat}
 											queuedMessageSource={queuedMessageSource}
+											queuedAttachments={queuedChatAttachments}
 											initialSelectedModel={queuedChatModel}
 											initialChatProject={queuedChatProject}
 										/>
