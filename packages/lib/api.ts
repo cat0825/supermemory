@@ -84,8 +84,10 @@ export const apiSchema = createSchema({
 			redirectUrl: z.string().optional(),
 		}),
 		output: z.object({
-			authLink: z.string(),
-			expiresIn: z.string(),
+			// authLink/expiresIn are present for OAuth providers (Drive/Notion/OneDrive)
+			// but absent for credential-based ones like Granola where there's no redirect.
+			authLink: z.string().optional(),
+			expiresIn: z.string().optional(),
 			id: z.string(),
 			redirectsTo: z.string().optional(),
 		}),
