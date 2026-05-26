@@ -90,7 +90,7 @@ export const apiSchema = createSchema({
 			redirectsTo: z.string().optional(),
 		}),
 		params: z.object({
-			provider: z.enum(["google-drive", "notion", "onedrive"]),
+			provider: z.enum(["google-drive", "notion", "onedrive", "granola"]),
 		}),
 	},
 
@@ -158,6 +158,7 @@ export const apiSchema = createSchema({
 				"github",
 				"web-crawler",
 				"s3",
+				"granola",
 			]),
 		}),
 	},
