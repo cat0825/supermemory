@@ -37,7 +37,10 @@ import { SyncStatusBadge } from "@/components/settings/sync-status-badge"
 import { SyncHistoryPanel } from "@/components/settings/sync-history-panel"
 import { useConnectionHealth } from "@/hooks/use-connection-health"
 import { useTriggerSync } from "@/hooks/use-trigger-sync"
-import { formatRelativeTime } from "@/components/settings/sync-utils"
+import {
+	formatRelativeTime,
+	getConnectionSubtitle,
+} from "@/components/settings/sync-utils"
 import type { ImportProvider } from "@/components/settings/sync-utils"
 
 type GDriveSyncScope = "scoped" | "full"
@@ -169,7 +172,7 @@ function ConnectionRow({
 								"truncate text-[14px] text-[#737373]",
 							)}
 						>
-							{connection.email || "Unknown"}
+							{getConnectionSubtitle(connection)}
 						</span>
 					</div>
 					<div className="flex shrink-0 items-center gap-0.5">

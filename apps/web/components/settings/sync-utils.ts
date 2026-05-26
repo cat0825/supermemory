@@ -45,7 +45,14 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 	granola: "Granola",
 }
 
-/** Provider type union matching the backend import endpoint */
+export function getConnectionSubtitle(conn: {
+	provider: string
+	email?: string | null
+}): string {
+	if (conn.provider === "granola") return "Granola workspace"
+	return conn.email || "Unknown"
+}
+
 export type ImportProvider =
 	| "google-drive"
 	| "notion"
