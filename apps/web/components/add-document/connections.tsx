@@ -4,7 +4,7 @@ import { $fetch } from "@lib/api"
 import { hasActivePlan } from "@lib/queries"
 import type { ConnectionResponseSchema } from "@repo/validation/api"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { GoogleDrive, Notion, OneDrive } from "@ui/assets/icons"
+import { GoogleDrive, Granola, Notion, OneDrive } from "@ui/assets/icons"
 import { useCustomer } from "autumn-js/react"
 import {
 	Check,
@@ -31,6 +31,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@ui/components/dropdown-menu"
+import { GranolaConnectModal } from "@/components/granola-connect-modal"
 import { RemoveConnectionDialog } from "@/components/remove-connection-dialog"
 import { SyncStatusBadge } from "@/components/settings/sync-status-badge"
 import { SyncHistoryPanel } from "@/components/settings/sync-history-panel"
@@ -48,7 +49,7 @@ const GDRIVE_SCOPE_LABELS: Record<GDriveSyncScope, string> = {
 
 type Connection = z.infer<typeof ConnectionResponseSchema>
 
-type ConnectorProvider = "google-drive" | "notion" | "onedrive"
+type ConnectorProvider = "google-drive" | "notion" | "onedrive" | "granola"
 
 const CONNECTORS: Record<
 	ConnectorProvider,
@@ -76,6 +77,12 @@ const CONNECTORS: Record<
 		description: "Access your Microsoft Office documents",
 		documentLabel: "documents",
 		icon: OneDrive,
+	},
+	granola: {
+		title: "Granola",
+		description: "Sync AI meeting notes and transcripts",
+		documentLabel: "notes",
+		icon: Granola,
 	},
 } as const
 
@@ -302,6 +309,7 @@ export function ConnectContent({ selectedProject }: ConnectContentProps) {
 	const isProUser = hasActivePlan(autumn.data?.subscriptions, "api_pro")
 	const [connectingProvider, setConnectingProvider] =
 		useState<ConnectorProvider | null>(null)
+	const [granolaModalOpen, setGranolaModalOpen] = useState(false)
 	const [gdriveSyncScope, setGdriveSyncScope] =
 		useState<GDriveSyncScope>("scoped")
 	const [isUpgrading, setIsUpgrading] = useState(false)
@@ -753,6 +761,20 @@ export function ConnectContent({ selectedProject }: ConnectContentProps) {
 												</span>
 											</div>
 										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => setGranolaModalOpen(true)}
+											className="flex items-start gap-2.5 px-3 py-2.5 rounded-md cursor-pointer text-white opacity-60 hover:opacity-100 hover:bg-[#293952]/40 focus:bg-[#293952]/40 focus:opacity-100"
+										>
+											<Granola className="size-5 mt-0.5 shrink-0" />
+											<div className="flex flex-col gap-0.5 min-w-0">
+												<span className="text-[14px] font-medium text-[#FAFAFA] leading-tight">
+													Granola
+												</span>
+												<span className="text-[11px] text-[#737373] leading-tight">
+													Meeting notes & transcripts
+												</span>
+											</div>
+										</DropdownMenuItem>
 									</div>
 								</div>
 							</DropdownMenuContent>
@@ -878,6 +900,12 @@ export function ConnectContent({ selectedProject }: ConnectContentProps) {
 					}
 				}}
 				isDeleting={deleteConnectionMutation.isPending}
+			/>
+
+			<GranolaConnectModal
+				open={granolaModalOpen}
+				onOpenChange={setGranolaModalOpen}
+				containerTags={[selectedProject]}
 			/>
 		</div>
 	)
