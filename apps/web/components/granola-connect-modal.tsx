@@ -174,8 +174,8 @@ export function GranolaConnectModal({
 							"mt-2 text-[11px] leading-snug text-[#737373]",
 						)}
 					>
-						Create one in Granola → Settings → Connectors → API keys.
-						Requires a Business or Enterprise plan.
+						Create one in Granola → Settings → Connectors → API keys. Requires a
+						Business or Enterprise plan.
 					</p>
 					{errorMessage && (
 						<p
