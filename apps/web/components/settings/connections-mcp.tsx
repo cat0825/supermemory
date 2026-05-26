@@ -4,7 +4,7 @@ import { dmSans125ClassName } from "@/lib/fonts"
 import { cn } from "@lib/utils"
 import { $fetch } from "@lib/api"
 import { hasActivePlan } from "@lib/queries"
-import { GoogleDrive, Notion, OneDrive } from "@ui/assets/icons"
+import { GoogleDrive, Granola, Notion, OneDrive } from "@ui/assets/icons"
 import { useCustomer } from "autumn-js/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -67,6 +67,12 @@ const CONNECTORS = {
 		description: "Access your Microsoft Office documents",
 		icon: OneDrive,
 		documentLabel: "documents",
+	},
+	granola: {
+		title: "Granola",
+		description: "Sync AI meeting notes and transcripts",
+		icon: Granola,
+		documentLabel: "notes",
 	},
 } as const
 
