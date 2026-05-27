@@ -8,6 +8,11 @@ import {
 	RotateCcwIcon,
 	XIcon,
 } from "lucide-react"
+import {
+	Dialog,
+	DialogContent,
+	DialogTitle,
+} from "@repo/ui/components/dialog"
 import NovaOrb from "@/components/nova/nova-orb"
 import { cn } from "@lib/utils"
 import { dmSansClassName } from "@/lib/fonts"
@@ -58,7 +63,7 @@ export default function ChatInput({
 	attachments = [],
 	onAddAttachmentFiles,
 	onRemoveAttachment,
-	onToggleAttachmentSave: _onToggleAttachmentSave,
+	onToggleAttachmentSave,
 	onRetryAttachment,
 	canSend,
 	attachmentAccept = CHAT_ATTACHMENT_ACCEPT,
@@ -98,13 +103,14 @@ export default function ChatInput({
 	const sendEnabled = canSend ?? value.trim().length > 0
 
 	const attachmentTray = showAttachments ? (
-		<div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
+		<div className="scrollbar-none flex max-w-full gap-2 overflow-x-auto px-0 pb-1 sm:px-1">
 			{attachments.map((attachment) => {
 				return (
 					<AttachmentPreviewChip
 						key={attachment.id}
 						attachment={attachment}
 						onRemove={onRemoveAttachment}
+						onToggleSave={onToggleAttachmentSave}
 						onRetry={onRetryAttachment}
 					/>
 				)
@@ -126,7 +132,7 @@ export default function ChatInput({
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
 				disabled={isResponding}
-				className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-surface-border bg-surface-card text-[#A6B0BE] transition-colors hover:bg-surface-hover hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#242832] bg-black text-[#A6B0BE] transition-colors hover:border-[#3A4049] hover:bg-[#111418] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 				aria-label="Attach files"
 				title="Attach files"
 			>
@@ -266,13 +272,16 @@ export default function ChatInput({
 function AttachmentPreviewChip({
 	attachment,
 	onRemove,
+	onToggleSave,
 	onRetry,
 }: {
 	attachment: ChatAttachmentDraft
 	onRemove?: (id: string) => void
+	onToggleSave?: (id: string) => void
 	onRetry?: (id: string) => void
 }) {
 	const [objectUrl, setObjectUrl] = useState<string | null>(null)
+	const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 	const isUploading = attachment.status === "uploading"
 	const isUploaded = attachment.status === "uploaded"
 	const isError = attachment.status === "error"
@@ -299,69 +308,161 @@ function AttachmentPreviewChip({
 				: formatAttachmentSize(attachment.file.size)
 
 	return (
-		<div
-			className={cn(
-				"group flex h-11 min-w-[220px] max-w-[min(290px,78vw)] shrink-0 items-center gap-2 rounded-xl border border-surface-border bg-surface-card px-2 text-sm text-fg-primary shadow-[0_6px_18px_rgba(0,0,0,0.16)]",
-				isError && "border-red-400/40 bg-red-950/20",
-			)}
-			title={statusLabel}
-		>
-			<div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-surface-border bg-surface-base">
-				{isImage && objectUrl ? (
-					<img
-						src={objectUrl}
-						alt=""
-						className="size-full object-cover"
-						draggable={false}
-					/>
-				) : (
-					<DocumentFileGlyph label={extension} />
-				)}
-				{isUploading || isUploaded ? (
-					<div className="absolute inset-0 flex items-center justify-center bg-black/55">
-						{isUploading ? (
-							<Loader2Icon className="size-3.5 animate-spin text-brand-accent" />
-						) : (
-							<CheckIcon className="size-3.5 text-emerald-400" />
-						)}
-					</div>
-				) : null}
-			</div>
+		<>
 			<div
-				className="min-w-0 flex-1 truncate font-medium leading-none text-fg-primary"
-				title={attachment.file.name}
+				onClick={() => isImage && objectUrl && setIsPreviewOpen(true)}
+				className={cn(
+					"group relative flex h-11 w-[min(280px,calc(100vw-4.5rem))] shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-[#1A1D22] bg-[#050607] px-2 text-sm text-fg-primary shadow-[0_6px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-[#30343B] hover:bg-[#080A0D] focus-within:border-[#30343B] sm:w-auto sm:min-w-[220px] sm:max-w-[300px] sm:hover:border-[#2261CA66] sm:hover:bg-[#041127] sm:focus-within:border-[#2261CA66] sm:focus-within:bg-[#041127]",
+					isImage && objectUrl && "cursor-pointer",
+					isError && "border-red-400/40 bg-red-950/20 hover:border-red-400/50",
+				)}
+				title={statusLabel}
 			>
-				{attachment.file.name}
-			</div>
-			{isError ? (
 				<button
 					type="button"
-					onClick={() => onRetry?.(attachment.id)}
-					className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-primary"
-					aria-label={`Retry ${attachment.file.name}`}
-					title={statusLabel}
+					onClick={() => isImage && objectUrl && setIsPreviewOpen(true)}
+					disabled={!isImage || !objectUrl}
+					className={cn(
+						"relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#242832] bg-black",
+						isImage && objectUrl && "cursor-pointer hover:border-[#4B5563]",
+						(!isImage || !objectUrl) && "cursor-default",
+					)}
+					aria-label={
+						isImage ? `Preview ${attachment.file.name}` : attachment.file.name
+					}
 				>
-					<RotateCcwIcon className="size-3.5" />
+					{isImage && objectUrl ? (
+						<img
+							src={objectUrl}
+							alt=""
+							className="size-full object-cover"
+							draggable={false}
+						/>
+					) : (
+						<DocumentFileGlyph label={extension} />
+					)}
+					{isUploading || isUploaded ? (
+						<div className="absolute inset-0 flex items-center justify-center bg-black/60">
+							{isUploading ? (
+								<Loader2Icon className="size-3.5 animate-spin text-[#C8D1DC]" />
+							) : (
+								<CheckIcon className="size-3.5 text-emerald-400" />
+							)}
+						</div>
+					) : null}
 				</button>
-			) : null}
-			<button
-				type="button"
-				onClick={() => onRemove?.(attachment.id)}
-				disabled={isUploading}
-				className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50"
-				aria-label={`Remove ${attachment.file.name}`}
-			>
-				<XIcon className="size-4" />
-			</button>
-		</div>
+				<div className="min-w-0 flex-1 pr-1">
+					<div
+						className="truncate font-medium leading-none text-fg-primary"
+						title={attachment.file.name}
+					>
+						{attachment.file.name}
+					</div>
+					<div className="mt-1 truncate text-[11px] leading-none text-fg-faint">
+						{statusLabel}
+					</div>
+				</div>
+				<div className="hidden shrink-0 items-center gap-1 opacity-0 transition-opacity sm:flex sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+					{onToggleSave ? (
+						<button
+							type="button"
+							onClick={(event) => {
+								event.stopPropagation()
+								onToggleSave(attachment.id)
+							}}
+							disabled={isUploading}
+							className={cn(
+								"flex h-7 items-center rounded-md border border-[#242832] bg-black px-2 text-[11px] font-medium text-[#D7DCE2] transition-colors hover:border-[#3A4049] hover:bg-[#111418] disabled:cursor-not-allowed disabled:opacity-50",
+								attachment.saveToMemory &&
+									"border-[#2261CA33] bg-[#041127] text-[#4BA0FA] hover:border-[#3374FF]/55 hover:bg-[#0A1A3A] hover:text-white",
+							)}
+							aria-label={
+								attachment.saveToMemory
+									? `Do not save ${attachment.file.name} to memory`
+									: `Save ${attachment.file.name} to memory`
+							}
+							title={attachment.saveToMemory ? "Save to memory" : "Chat only"}
+						>
+							{attachment.saveToMemory ? "Save" : "Chat only"}
+						</button>
+					) : null}
+					{isError ? (
+						<button
+							type="button"
+							onClick={(event) => {
+								event.stopPropagation()
+								onRetry?.(attachment.id)
+							}}
+							className="flex size-7 shrink-0 items-center justify-center rounded-md border border-[#242832] bg-black text-fg-faint transition-colors hover:border-[#3A4049] hover:bg-[#111418] hover:text-fg-primary"
+							aria-label={`Retry ${attachment.file.name}`}
+							title={statusLabel}
+						>
+							<RotateCcwIcon className="size-3.5" />
+						</button>
+					) : null}
+				</div>
+				<button
+					type="button"
+					onClick={(event) => {
+						event.stopPropagation()
+						onRemove?.(attachment.id)
+					}}
+					disabled={isUploading}
+					className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-[#111418] hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label={`Remove ${attachment.file.name}`}
+				>
+					<XIcon className="size-4" />
+				</button>
+			</div>
+			<Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+				<DialogContent
+					showCloseButton={false}
+					className="w-[calc(100vw-32px)] max-w-none gap-0 overflow-hidden rounded-xl border border-[#1D222A] bg-[#050607] p-0 text-fg-primary shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:w-[min(92vw,980px)] sm:max-w-[980px]"
+				>
+					<DialogTitle className="sr-only">
+						Preview {attachment.file.name}
+					</DialogTitle>
+					<div className="flex min-h-0 flex-col">
+						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)_32px] items-center gap-2 border-[#171B22] border-b px-3 py-2 sm:px-4 sm:py-3">
+							<div className="min-w-0">
+								<p className="truncate font-medium text-fg-primary text-sm">
+									{attachment.file.name}
+								</p>
+								<p className="mt-0.5 text-[11px] text-fg-faint">
+									{formatAttachmentSize(attachment.file.size)}
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setIsPreviewOpen(false)}
+								className="flex size-8 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-[#111418] hover:text-fg-primary focus:outline-none focus:ring-2 focus:ring-[#3374FF]/40"
+							>
+								<XIcon className="size-4" />
+								<span className="sr-only">Close preview</span>
+							</button>
+						</div>
+						<div className="grid h-[min(58dvh,380px)] place-items-center bg-black px-4 py-5 sm:h-[min(76dvh,680px)] sm:px-6 sm:py-6">
+							{objectUrl ? (
+								<img
+									src={objectUrl}
+									alt={attachment.file.name}
+									className="block max-h-full max-w-full rounded-lg object-contain"
+									draggable={false}
+								/>
+							) : null}
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</>
 	)
 }
 
 function DocumentFileGlyph({ label }: { label: string }) {
 	return (
-		<div className="relative flex size-6 items-end justify-center rounded-[4px] border border-surface-border bg-surface-card pb-1">
-			<div className="absolute right-0 top-0 size-2.5 border-surface-border border-b border-l bg-surface-base" />
-			<span className="max-w-[22px] truncate text-[8px] font-bold uppercase leading-none text-fg-faint">
+		<div className="relative flex size-6 items-end justify-center rounded-[4px] border border-[#30343B] bg-[#07090C] pb-1">
+			<div className="absolute right-0 top-0 size-2.5 border-[#30343B] border-b border-l bg-black" />
+			<span className="max-w-[22px] truncate text-[8px] font-bold uppercase leading-none text-[#AAB2BD]">
 				{label}
 			</span>
 		</div>
