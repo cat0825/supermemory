@@ -3,7 +3,6 @@
 import {
 	CheckIcon,
 	ChevronUpIcon,
-	FileIcon,
 	Loader2Icon,
 	PaperclipIcon,
 	RotateCcwIcon,
@@ -59,7 +58,7 @@ export default function ChatInput({
 	attachments = [],
 	onAddAttachmentFiles,
 	onRemoveAttachment,
-	onToggleAttachmentSave,
+	onToggleAttachmentSave: _onToggleAttachmentSave,
 	onRetryAttachment,
 	canSend,
 	attachmentAccept = CHAT_ATTACHMENT_ACCEPT,
@@ -99,77 +98,15 @@ export default function ChatInput({
 	const sendEnabled = canSend ?? value.trim().length > 0
 
 	const attachmentTray = showAttachments ? (
-		<div className="flex max-h-32 flex-col gap-1.5 overflow-y-auto px-1 pb-1">
+		<div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
 			{attachments.map((attachment) => {
-				const isUploading = attachment.status === "uploading"
-				const isUploaded = attachment.status === "uploaded"
-				const isError = attachment.status === "error"
 				return (
-					<div
+					<AttachmentPreviewChip
 						key={attachment.id}
-						className={cn(
-							"flex min-w-0 items-center gap-2 rounded-lg border border-[#273244] bg-[#07111F]/80 px-2.5 py-2 text-xs text-[#A6B0BE]",
-							isError && "border-red-400/40 bg-red-950/20",
-						)}
-					>
-						<div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#101824]">
-							{isUploading ? (
-								<Loader2Icon className="size-3.5 animate-spin text-[#4BA0FA]" />
-							) : isUploaded ? (
-								<CheckIcon className="size-3.5 text-emerald-400" />
-							) : (
-								<FileIcon className="size-3.5 text-[#7E8BA0]" />
-							)}
-						</div>
-						<div className="min-w-0 flex-1">
-							<div className="truncate font-medium text-[#E8EDF5]">
-								{attachment.file.name}
-							</div>
-							<div className="truncate text-[11px] text-[#7E8BA0]">
-								{isError
-									? attachment.errorMessage || "Upload failed"
-									: formatAttachmentSize(attachment.file.size)}
-							</div>
-						</div>
-						<button
-							type="button"
-							onClick={() => onToggleAttachmentSave?.(attachment.id)}
-							disabled={isUploading || isUploaded}
-							className={cn(
-								"shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors",
-								attachment.saveToMemory
-									? "border-[#267BF1]/50 bg-[#267BF1]/15 text-[#8FC3FF]"
-									: "border-[#303949] bg-[#0B111A] text-[#7E8BA0]",
-								(isUploading || isUploaded) && "cursor-not-allowed opacity-60",
-							)}
-							title={
-								attachment.saveToMemory
-									? "Save this attachment to memories"
-									: "Use this attachment only in chat"
-							}
-						>
-							{attachment.saveToMemory ? "Save" : "Chat only"}
-						</button>
-						{isError ? (
-							<button
-								type="button"
-								onClick={() => onRetryAttachment?.(attachment.id)}
-								className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#A6B0BE] transition-colors hover:bg-[#182235] hover:text-white"
-								aria-label={`Retry ${attachment.file.name}`}
-							>
-								<RotateCcwIcon className="size-3.5" />
-							</button>
-						) : null}
-						<button
-							type="button"
-							onClick={() => onRemoveAttachment?.(attachment.id)}
-							disabled={isUploading}
-							className="flex size-7 shrink-0 items-center justify-center rounded-md text-[#7E8BA0] transition-colors hover:bg-[#182235] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-							aria-label={`Remove ${attachment.file.name}`}
-						>
-							<XIcon className="size-3.5" />
-						</button>
-					</div>
+						attachment={attachment}
+						onRemove={onRemoveAttachment}
+						onRetry={onRetryAttachment}
+					/>
 				)
 			})}
 		</div>
@@ -324,4 +261,121 @@ export default function ChatInput({
 			)}
 		</motion.div>
 	)
+}
+
+function AttachmentPreviewChip({
+	attachment,
+	onRemove,
+	onRetry,
+}: {
+	attachment: ChatAttachmentDraft
+	onRemove?: (id: string) => void
+	onRetry?: (id: string) => void
+}) {
+	const [objectUrl, setObjectUrl] = useState<string | null>(null)
+	const isUploading = attachment.status === "uploading"
+	const isUploaded = attachment.status === "uploaded"
+	const isError = attachment.status === "error"
+	const isImage = attachment.file.type.startsWith("image/")
+	const extension = getAttachmentExtension(attachment.file)
+
+	useEffect(() => {
+		if (!isImage) {
+			setObjectUrl(null)
+			return
+		}
+
+		const url = URL.createObjectURL(attachment.file)
+		setObjectUrl(url)
+		return () => URL.revokeObjectURL(url)
+	}, [attachment.file, isImage])
+
+	const statusLabel = isError
+		? attachment.errorMessage || "Upload failed"
+		: isUploading
+			? "Uploading..."
+			: isUploaded
+				? "Uploaded"
+				: formatAttachmentSize(attachment.file.size)
+
+	return (
+		<div
+			className={cn(
+				"group flex h-11 min-w-[220px] max-w-[min(290px,78vw)] shrink-0 items-center gap-2 rounded-xl border border-surface-border bg-surface-card px-2 text-sm text-fg-primary shadow-[0_6px_18px_rgba(0,0,0,0.16)]",
+				isError && "border-red-400/40 bg-red-950/20",
+			)}
+			title={statusLabel}
+		>
+			<div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-surface-border bg-surface-base">
+				{isImage && objectUrl ? (
+					<img
+						src={objectUrl}
+						alt=""
+						className="size-full object-cover"
+						draggable={false}
+					/>
+				) : (
+					<DocumentFileGlyph label={extension} />
+				)}
+				{isUploading || isUploaded ? (
+					<div className="absolute inset-0 flex items-center justify-center bg-black/55">
+						{isUploading ? (
+							<Loader2Icon className="size-3.5 animate-spin text-brand-accent" />
+						) : (
+							<CheckIcon className="size-3.5 text-emerald-400" />
+						)}
+					</div>
+				) : null}
+			</div>
+			<div
+				className="min-w-0 flex-1 truncate font-medium leading-none text-fg-primary"
+				title={attachment.file.name}
+			>
+				{attachment.file.name}
+			</div>
+			{isError ? (
+				<button
+					type="button"
+					onClick={() => onRetry?.(attachment.id)}
+					className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-primary"
+					aria-label={`Retry ${attachment.file.name}`}
+					title={statusLabel}
+				>
+					<RotateCcwIcon className="size-3.5" />
+				</button>
+			) : null}
+			<button
+				type="button"
+				onClick={() => onRemove?.(attachment.id)}
+				disabled={isUploading}
+				className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-primary disabled:cursor-not-allowed disabled:opacity-50"
+				aria-label={`Remove ${attachment.file.name}`}
+			>
+				<XIcon className="size-4" />
+			</button>
+		</div>
+	)
+}
+
+function DocumentFileGlyph({ label }: { label: string }) {
+	return (
+		<div className="relative flex size-6 items-end justify-center rounded-[4px] border border-surface-border bg-surface-card pb-1">
+			<div className="absolute right-0 top-0 size-2.5 border-surface-border border-b border-l bg-surface-base" />
+			<span className="max-w-[22px] truncate text-[8px] font-bold uppercase leading-none text-fg-faint">
+				{label}
+			</span>
+		</div>
+	)
+}
+
+function getAttachmentExtension(file: File): string {
+	const name = file.name
+	const dotIndex = name.lastIndexOf(".")
+	if (dotIndex > -1 && dotIndex < name.length - 1) {
+		return name.slice(dotIndex + 1, dotIndex + 4)
+	}
+	if (file.type === "text/markdown") return "MD"
+	if (file.type.includes("pdf")) return "PDF"
+	if (file.type.startsWith("text/")) return "TXT"
+	return "FILE"
 }
