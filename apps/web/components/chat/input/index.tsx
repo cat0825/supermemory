@@ -8,11 +8,7 @@ import {
 	RotateCcwIcon,
 	XIcon,
 } from "lucide-react"
-import {
-	Dialog,
-	DialogContent,
-	DialogTitle,
-} from "@repo/ui/components/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@repo/ui/components/dialog"
 import NovaOrb from "@/components/nova/nova-orb"
 import { cn } from "@lib/utils"
 import { dmSansClassName } from "@/lib/fonts"
@@ -310,7 +306,6 @@ function AttachmentPreviewChip({
 	return (
 		<>
 			<div
-				onClick={() => isImage && objectUrl && setIsPreviewOpen(true)}
 				className={cn(
 					"group relative flex h-11 w-[min(280px,calc(100vw-4.5rem))] shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-[#1A1D22] bg-[#050607] px-2 text-sm text-fg-primary shadow-[0_6px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-[#30343B] hover:bg-[#080A0D] focus-within:border-[#30343B] sm:w-auto sm:min-w-[220px] sm:max-w-[300px] sm:hover:border-[#2261CA66] sm:hover:bg-[#041127] sm:focus-within:border-[#2261CA66] sm:focus-within:bg-[#041127]",
 					isImage && objectUrl && "cursor-pointer",
