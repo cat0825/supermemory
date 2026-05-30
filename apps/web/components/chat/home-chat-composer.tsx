@@ -103,14 +103,6 @@ export function HomeChatComposer({
 		setAttachmentDrafts((prev) => prev.filter((item) => item.id !== id))
 	}, [])
 
-	const handleToggleAttachmentSave = useCallback((id: string) => {
-		setAttachmentDrafts((prev) =>
-			prev.map((item) =>
-				item.id === id ? { ...item, saveToMemory: !item.saveToMemory } : item,
-			),
-		)
-	}, [])
-
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault()
@@ -131,7 +123,6 @@ export function HomeChatComposer({
 					attachments={attachmentDrafts}
 					onAddAttachmentFiles={handleAddAttachmentFiles}
 					onRemoveAttachment={handleRemoveAttachment}
-					onToggleAttachmentSave={handleToggleAttachmentSave}
 					canSend={input.trim().length > 0 || attachmentDrafts.length > 0}
 					attachmentAccept={CHAT_ATTACHMENT_ACCEPT}
 					showStatusStrip={false}

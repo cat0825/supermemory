@@ -23,6 +23,8 @@ export type ChatAttachment = {
 	size: number
 	saveToMemory: boolean
 	status: "ready" | "processing" | "failed"
+	url?: string
+	contentPreview?: string
 }
 
 export type ChatAttachmentDraftStatus =

@@ -38,7 +38,6 @@ interface ChatInputProps {
 	attachments?: ChatAttachmentDraft[]
 	onAddAttachmentFiles?: (files: FileList | File[]) => void
 	onRemoveAttachment?: (id: string) => void
-	onToggleAttachmentSave?: (id: string) => void
 	onRetryAttachment?: (id: string) => void
 	canSend?: boolean
 	attachmentAccept?: string
@@ -59,7 +58,6 @@ export default function ChatInput({
 	attachments = [],
 	onAddAttachmentFiles,
 	onRemoveAttachment,
-	onToggleAttachmentSave,
 	onRetryAttachment,
 	canSend,
 	attachmentAccept = CHAT_ATTACHMENT_ACCEPT,
@@ -106,7 +104,6 @@ export default function ChatInput({
 						key={attachment.id}
 						attachment={attachment}
 						onRemove={onRemoveAttachment}
-						onToggleSave={onToggleAttachmentSave}
 						onRetry={onRetryAttachment}
 					/>
 				)
@@ -268,12 +265,10 @@ export default function ChatInput({
 function AttachmentPreviewChip({
 	attachment,
 	onRemove,
-	onToggleSave,
 	onRetry,
 }: {
 	attachment: ChatAttachmentDraft
 	onRemove?: (id: string) => void
-	onToggleSave?: (id: string) => void
 	onRetry?: (id: string) => void
 }) {
 	const [objectUrl, setObjectUrl] = useState<string | null>(null)
@@ -358,29 +353,6 @@ function AttachmentPreviewChip({
 					</div>
 				</div>
 				<div className="hidden shrink-0 items-center gap-1 opacity-0 transition-opacity sm:flex sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-					{onToggleSave ? (
-						<button
-							type="button"
-							onClick={(event) => {
-								event.stopPropagation()
-								onToggleSave(attachment.id)
-							}}
-							disabled={isUploading}
-							className={cn(
-								"flex h-7 items-center rounded-md border border-[#242832] bg-black px-2 text-[11px] font-medium text-[#D7DCE2] transition-colors hover:border-[#3A4049] hover:bg-[#111418] disabled:cursor-not-allowed disabled:opacity-50",
-								attachment.saveToMemory &&
-									"border-[#2261CA33] bg-[#041127] text-[#4BA0FA] hover:border-[#3374FF]/55 hover:bg-[#0A1A3A] hover:text-white",
-							)}
-							aria-label={
-								attachment.saveToMemory
-									? `Do not save ${attachment.file.name} to memory`
-									: `Save ${attachment.file.name} to memory`
-							}
-							title={attachment.saveToMemory ? "Save to memory" : "Chat only"}
-						>
-							{attachment.saveToMemory ? "Save" : "Chat only"}
-						</button>
-					) : null}
 					{isError ? (
 						<button
 							type="button"

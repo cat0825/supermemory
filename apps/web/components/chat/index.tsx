@@ -83,6 +83,8 @@ function normalizeChatAttachmentResponse(
 		size: attachment.size ?? draft.file.size,
 		saveToMemory: attachment.saveToMemory ?? draft.saveToMemory,
 		status: attachment.status ?? "ready",
+		url: attachment.url,
+		contentPreview: attachment.contentPreview,
 	}
 }
 
@@ -394,14 +396,6 @@ export function ChatSidebar({
 
 	const handleRemoveAttachment = useCallback((id: string) => {
 		setAttachmentDrafts((prev) => prev.filter((item) => item.id !== id))
-	}, [])
-
-	const handleToggleAttachmentSave = useCallback((id: string) => {
-		setAttachmentDrafts((prev) =>
-			prev.map((item) =>
-				item.id === id ? { ...item, saveToMemory: !item.saveToMemory } : item,
-			),
-		)
 	}, [])
 
 	const uploadAttachmentDraft = useCallback(
@@ -1411,7 +1405,6 @@ export function ChatSidebar({
 					attachments={attachmentDrafts}
 					onAddAttachmentFiles={handleAddAttachmentFiles}
 					onRemoveAttachment={handleRemoveAttachment}
-					onToggleAttachmentSave={handleToggleAttachmentSave}
 					onRetryAttachment={handleRetryAttachment}
 					canSend={canSendMessage}
 					attachmentAccept={CHAT_ATTACHMENT_ACCEPT}
