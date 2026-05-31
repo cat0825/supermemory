@@ -61,8 +61,12 @@ import {
 	type ChatAttachmentDraft,
 	isAcceptedChatAttachment,
 } from "./attachments"
+import { cacheFileBlob, removeCachedFile } from "@/lib/file-cache"
 
 type ChatMessageSendSource = "typed" | "suggested" | "highlight" | "home"
+
+const DISCARD_ATTACHMENT_MAX_ATTEMPTS = 15
+const DISCARD_ATTACHMENT_RETRY_MS = 2000
 
 type RawChatAttachmentResponse = Partial<ChatAttachment> & {
 	attachment?: Partial<ChatAttachment>
@@ -192,6 +196,11 @@ export function ChatSidebar({
 	const pendingHighlightMessageRef = useRef<UIMessage[] | null>(null)
 	const targetHighlightChatIdRef = useRef<string | null>(null)
 	const pendingRequestAttachmentsRef = useRef<ChatAttachment[]>([])
+	const uploadPromisesRef = useRef<Map<string, Promise<ChatAttachment>>>(
+		new Map(),
+	)
+	const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+	const discardedDraftIdsRef = useRef<Set<string>>(new Set())
 	const { selectedProject } = useProject()
 	const [chatSpaceProjects, setChatSpaceProjects] = useState<string[]>([
 		initialChatProject ?? selectedProject,
@@ -353,6 +362,171 @@ export function ChatSidebar({
 		[],
 	)
 
+	const discardUploadedAttachment = useCallback(
+		(documentId: string) => {
+			void removeCachedFile(documentId)
+
+			const run = async (attempt: number): Promise<void> => {
+				try {
+					const response = await fetch(
+						`${chatApiBase}/chat/attachments/${documentId}`,
+						{
+							method: "DELETE",
+							credentials: "include",
+						},
+					)
+
+					if (
+						response.status === 409 &&
+						attempt < DISCARD_ATTACHMENT_MAX_ATTEMPTS
+					) {
+						setTimeout(() => {
+							void run(attempt + 1)
+						}, DISCARD_ATTACHMENT_RETRY_MS)
+						return
+					}
+
+					if (!response.ok && response.status !== 404) {
+						console.warn("Failed to discard chat attachment", {
+							documentId,
+							status: response.status,
+						})
+					}
+				} catch (error) {
+					if (attempt < DISCARD_ATTACHMENT_MAX_ATTEMPTS) {
+						setTimeout(() => {
+							void run(attempt + 1)
+						}, DISCARD_ATTACHMENT_RETRY_MS)
+						return
+					}
+					console.warn("Failed to discard chat attachment", {
+						documentId,
+						error,
+					})
+				}
+			}
+
+			void run(1)
+		},
+		[chatApiBase],
+	)
+
+	const uploadAttachmentDraft = useCallback(
+		(
+			draft: ChatAttachmentDraft,
+			chatIdForUpload: string,
+		): Promise<ChatAttachment> => {
+			if (draft.status === "uploaded" && draft.uploaded) {
+				return Promise.resolve(draft.uploaded)
+			}
+
+			const inflight = uploadPromisesRef.current.get(draft.id)
+			if (inflight) return inflight
+
+			const uploadPromise = (async (): Promise<ChatAttachment> => {
+				const controller = new AbortController()
+				abortControllersRef.current.set(draft.id, controller)
+
+				setAttachmentDraftState(draft.id, {
+					status: "uploading",
+					errorMessage: undefined,
+				})
+
+				const formData = new FormData()
+				formData.append("file", draft.file)
+				formData.append("threadId", chatIdForUpload)
+				formData.append("projectId", selectedProjectRef.current)
+				formData.append("saveToMemory", String(draft.saveToMemory))
+
+				try {
+					const response = await fetch(`${chatApiBase}/chat/attachments`, {
+						method: "POST",
+						body: formData,
+						credentials: "include",
+						signal: controller.signal,
+					})
+
+					if (!response.ok) {
+						let message = "Failed to upload attachment"
+						try {
+							const error = (await response.json()) as {
+								error?: string
+								message?: string
+							}
+							message = error.error ?? error.message ?? message
+						} catch {
+							// keep the fallback error
+						}
+						throw new Error(message)
+					}
+
+					const data = (await response.json()) as RawChatAttachmentResponse
+					const attachment = normalizeChatAttachmentResponse(data, draft)
+
+					abortControllersRef.current.delete(draft.id)
+
+					if (discardedDraftIdsRef.current.has(draft.id)) {
+						discardedDraftIdsRef.current.delete(draft.id)
+						if (attachment.documentId) {
+							discardUploadedAttachment(attachment.documentId)
+						}
+						return attachment
+					}
+
+					if (attachment.documentId) {
+						void cacheFileBlob(
+							attachment.documentId,
+							draft.file,
+							draft.file.type,
+						)
+					}
+					setAttachmentDraftState(draft.id, {
+						status: "uploaded",
+						uploaded: attachment,
+					})
+					return attachment
+				} catch (error) {
+					abortControllersRef.current.delete(draft.id)
+					uploadPromisesRef.current.delete(draft.id)
+
+					if (error instanceof DOMException && error.name === "AbortError") {
+						throw error
+					}
+
+					if (discardedDraftIdsRef.current.has(draft.id)) {
+						discardedDraftIdsRef.current.delete(draft.id)
+						throw error
+					}
+
+					const message =
+						error instanceof Error
+							? error.message
+							: "Failed to upload attachment"
+					setAttachmentDraftState(draft.id, {
+						status: "error",
+						errorMessage: message,
+					})
+					throw error
+				}
+			})()
+
+			uploadPromisesRef.current.set(draft.id, uploadPromise)
+			return uploadPromise
+		},
+		[chatApiBase, discardUploadedAttachment, setAttachmentDraftState],
+	)
+
+	const uploadAttachmentDrafts = useCallback(
+		async (drafts: ChatAttachmentDraft[], chatIdForUpload: string) => {
+			const uploaded: ChatAttachment[] = []
+			for (const draft of drafts) {
+				uploaded.push(await uploadAttachmentDraft(draft, chatIdForUpload))
+			}
+			return uploaded
+		},
+		[uploadAttachmentDraft],
+	)
+
 	const handleAddAttachmentFiles = useCallback(
 		(files: FileList | File[]) => {
 			const incoming = Array.from(files)
@@ -390,84 +564,36 @@ export function ChatSidebar({
 			}
 			if (nextItems.length === 0) return
 			setAttachmentDrafts((prev) => [...prev, ...nextItems])
+
+			for (const draft of nextItems) {
+				void uploadAttachmentDraft(draft, currentChatId).catch(() => {
+					// Upload errors are reflected on the draft state unless the draft was removed.
+				})
+			}
 		},
-		[attachmentDrafts],
+		[attachmentDrafts, currentChatId, uploadAttachmentDraft],
 	)
 
-	const handleRemoveAttachment = useCallback((id: string) => {
-		setAttachmentDrafts((prev) => prev.filter((item) => item.id !== id))
-	}, [])
+	const handleRemoveAttachment = useCallback(
+		(id: string) => {
+			const draft = attachmentDrafts.find((item) => item.id === id)
+			discardedDraftIdsRef.current.add(id)
 
-	const uploadAttachmentDraft = useCallback(
-		async (
-			draft: ChatAttachmentDraft,
-			chatIdForUpload: string,
-		): Promise<ChatAttachment> => {
-			if (draft.status === "uploaded" && draft.uploaded) {
-				return draft.uploaded
+			const controller = abortControllersRef.current.get(id)
+			if (controller) {
+				controller.abort()
+				abortControllersRef.current.delete(id)
+			}
+			uploadPromisesRef.current.delete(id)
+
+			const documentId = draft?.uploaded?.documentId
+			if (draft?.status === "uploaded" && documentId) {
+				discardUploadedAttachment(documentId)
 			}
 
-			setAttachmentDraftState(draft.id, {
-				status: "uploading",
-				errorMessage: undefined,
-			})
-
-			const formData = new FormData()
-			formData.append("file", draft.file)
-			formData.append("threadId", chatIdForUpload)
-			formData.append("projectId", selectedProjectRef.current)
-			formData.append("saveToMemory", String(draft.saveToMemory))
-
-			try {
-				const response = await fetch(`${chatApiBase}/chat/attachments`, {
-					method: "POST",
-					body: formData,
-					credentials: "include",
-				})
-
-				if (!response.ok) {
-					let message = "Failed to upload attachment"
-					try {
-						const error = (await response.json()) as {
-							error?: string
-							message?: string
-						}
-						message = error.error ?? error.message ?? message
-					} catch {
-						// keep the fallback error
-					}
-					throw new Error(message)
-				}
-
-				const data = (await response.json()) as RawChatAttachmentResponse
-				const attachment = normalizeChatAttachmentResponse(data, draft)
-				setAttachmentDraftState(draft.id, {
-					status: "uploaded",
-					uploaded: attachment,
-				})
-				return attachment
-			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : "Failed to upload attachment"
-				setAttachmentDraftState(draft.id, {
-					status: "error",
-					errorMessage: message,
-				})
-				throw error
-			}
+			setAttachmentDrafts((prev) => prev.filter((item) => item.id !== id))
 		},
-		[chatApiBase, setAttachmentDraftState],
-	)
-
-	const uploadAttachmentDrafts = useCallback(
-		async (drafts: ChatAttachmentDraft[], chatIdForUpload: string) => {
-			const uploaded: ChatAttachment[] = []
-			for (const draft of drafts) {
-				uploaded.push(await uploadAttachmentDraft(draft, chatIdForUpload))
-			}
-			return uploaded
-		},
-		[uploadAttachmentDraft],
+		[attachmentDrafts, discardUploadedAttachment],
 	)
 
 	const handleRetryAttachment = useCallback(
@@ -522,6 +648,11 @@ export function ChatSidebar({
 			const trimmed = text.trim()
 			if (!trimmed && drafts.length === 0) return false
 
+			const hasBusy = drafts.some(
+				(d) => d.status === "uploading" || d.status === "queued",
+			)
+			if (hasBusy) return false
+
 			const chatIdForSend = threadId ?? fallbackChatId
 			if (!threadId) setThreadId(fallbackChatId)
 
@@ -541,18 +672,25 @@ export function ChatSidebar({
 						(attachment) => !attachment.saveToMemory,
 					).length,
 				})
-				await sendMessage({
+
+				setInput("")
+				setAttachmentDrafts([])
+				uploadPromisesRef.current.clear()
+				abortControllersRef.current.clear()
+				discardedDraftIdsRef.current.clear()
+				userJustSentRef.current = true
+				scrollToBottom()
+
+				void sendMessage({
 					text: trimmed || "Analyze the attached file(s).",
 					metadata:
 						uploadedAttachments.length > 0
 							? { attachments: uploadedAttachments }
 							: undefined,
+				}).finally(() => {
+					pendingRequestAttachmentsRef.current = []
 				})
-				pendingRequestAttachmentsRef.current = []
-				setInput("")
-				setAttachmentDrafts([])
-				userJustSentRef.current = true
-				scrollToBottom()
+
 				return true
 			} catch (error) {
 				pendingRequestAttachmentsRef.current = []
@@ -650,6 +788,12 @@ export function ChatSidebar({
 		setFallbackChatId(newChatId)
 		setInput("")
 		setAttachmentDrafts([])
+		for (const controller of abortControllersRef.current.values()) {
+			controller.abort()
+		}
+		abortControllersRef.current.clear()
+		discardedDraftIdsRef.current.clear()
+		uploadPromisesRef.current.clear()
 	}, [setThreadId, setMessages])
 
 	const fetchThreads = useCallback(async () => {
@@ -1022,7 +1166,8 @@ export function ChatSidebar({
 	const showHeaderRow = !isPageDesktop || isMobile || !isStackedInput
 	const isResponding = status === "submitted" || status === "streaming"
 	const hasBusyAttachment = attachmentDrafts.some(
-		(attachment) => attachment.status === "uploading",
+		(attachment) =>
+			attachment.status === "uploading" || attachment.status === "queued",
 	)
 	const hasErroredAttachment = attachmentDrafts.some(
 		(attachment) => attachment.status === "error",

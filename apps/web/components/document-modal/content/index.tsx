@@ -88,7 +88,7 @@ export function DocumentContent({
 
 	switch (contentType) {
 		case "image":
-			return <ImagePreview url={document.url ?? ""} title={document.title} />
+			return <ImagePreview url={document.url ?? ""} title={document.title} documentId={document.id} />
 
 		case "tweet":
 			return (
