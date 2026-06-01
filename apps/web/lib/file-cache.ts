@@ -13,7 +13,11 @@ export async function cacheFileBlob(
 	mimeType: string,
 ): Promise<void> {
 	try {
-		await set(documentId, { blob, mimeType } satisfies CachedFile, fileCacheStore)
+		await set(
+			documentId,
+			{ blob, mimeType } satisfies CachedFile,
+			fileCacheStore,
+		)
 	} catch {
 		// Storage full or unavailable — non-critical, skip silently
 	}

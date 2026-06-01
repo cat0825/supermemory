@@ -24,37 +24,37 @@ export const UserMessage = memo(function UserMessage({
 
 	return (
 		<div className="flex flex-col items-end w-full">
-		<div className="bg-[#1B1F24] rounded-[12px] p-3 px-[14px] max-w-[80%]">
-			{attachments.length > 0 ? (
-				<div
-					className={
-						text ? "mb-2 flex flex-col gap-1.5" : "flex flex-col gap-1.5"
-					}
-				>
-					{attachments.map((attachment) => (
-						<div
-							key={attachment.id}
-							className="flex min-w-0 items-center gap-2 rounded-lg border border-[#303949] bg-[#0D121A]/80 px-2.5 py-2 text-left"
-						>
-							<div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#111A27]">
-								<FileIcon className="size-3.5 text-[#8FC3FF]" />
-							</div>
-							<div className="min-w-0">
-								<div className="truncate text-xs font-medium text-white">
-									{attachment.filename}
+			<div className="bg-[#1B1F24] rounded-[12px] p-3 px-[14px] max-w-[80%]">
+				{attachments.length > 0 ? (
+					<div
+						className={
+							text ? "mb-2 flex flex-col gap-1.5" : "flex flex-col gap-1.5"
+						}
+					>
+						{attachments.map((attachment) => (
+							<div
+								key={attachment.id}
+								className="flex min-w-0 items-center gap-2 rounded-lg border border-[#303949] bg-[#0D121A]/80 px-2.5 py-2 text-left"
+							>
+								<div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[#111A27]">
+									<FileIcon className="size-3.5 text-[#8FC3FF]" />
 								</div>
-								<div className="truncate text-[11px] text-white/50">
-									{formatAttachmentSize(attachment.size)}
-									{" · "}
-									{attachment.saveToMemory ? "Saved" : "Chat only"}
+								<div className="min-w-0">
+									<div className="truncate text-xs font-medium text-white">
+										{attachment.filename}
+									</div>
+									<div className="truncate text-[11px] text-white/50">
+										{formatAttachmentSize(attachment.size)}
+										{" · "}
+										{attachment.saveToMemory ? "Saved" : "Chat only"}
+									</div>
 								</div>
 							</div>
-						</div>
-					))}
-				</div>
-			) : null}
-			{text ? <p className="text-sm text-white">{text}</p> : null}
-		</div>
+						))}
+					</div>
+				) : null}
+				{text ? <p className="text-sm text-white">{text}</p> : null}
+			</div>
 			<button
 				type="button"
 				onClick={() => onCopy(message.id, text)}

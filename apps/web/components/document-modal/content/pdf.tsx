@@ -1,7 +1,7 @@
 "use client"
 
 import { Document, Page, pdfjs } from "react-pdf"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
 import { getCachedFileBlob } from "@/lib/file-cache"
