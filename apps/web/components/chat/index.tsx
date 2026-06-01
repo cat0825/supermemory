@@ -19,7 +19,6 @@ import {
 } from "@ui/components/sheet"
 import { ScrollArea } from "@ui/components/scroll-area"
 import {
-	ArrowLeft,
 	Check,
 	ChevronDownIcon,
 	HistoryIcon,
@@ -136,7 +135,7 @@ export function ChatLaunchFab({
 
 export function ChatSidebar({
 	isChatOpen,
-	setIsChatOpen,
+	setIsChatOpen: _setIsChatOpen,
 	queuedMessage,
 	queuedHighlightContent,
 	onConsumeQueuedMessage,
@@ -203,7 +202,7 @@ export function ChatSidebar({
 	const discardedDraftIdsRef = useRef<Set<string>>(new Set())
 	const { selectedProject } = useProject()
 	const [chatSpaceProjects, setChatSpaceProjects] = useState<string[]>([
-		initialChatProject ?? selectedProject,
+		initialChatProject ?? AUTO_CHAT_SPACE_ID,
 	])
 	const chatProject = chatSpaceProjects[0] ?? selectedProject
 	const { allProjects } = useContainerTags()
@@ -726,11 +725,22 @@ export function ChatSidebar({
 	)
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && !e.shiftKey) {
+		if (e.key === "Enter" && !e.shiftKey && !isMobile) {
 			e.preventDefault()
 			handleSend()
 		}
 	}
+
+	// When the user stops generation before any assistant response arrives,
+	// remove the dangling user message so it isn't duplicated on the next send.
+	const handleStop = useCallback(() => {
+		stop()
+		setMessages((prev) => {
+			const last = prev[prev.length - 1]
+			if (last?.role === "user") return prev.slice(0, -1)
+			return prev
+		})
+	}, [stop, setMessages])
 
 	const handleCopyMessage = useCallback((messageId: string, text: string) => {
 		analytics.chatMessageCopied({ message_id: messageId })
@@ -1177,8 +1187,7 @@ export function ChatSidebar({
 		!isResponding &&
 		!hasBusyAttachment &&
 		!hasErroredAttachment
-	const showInputStatusStrip =
-		!isStackedInput || isResponding || messages.length > 0
+	const showInputStatusStrip = !isStackedInput
 
 	const chatHistorySheet = (
 		<Sheet
@@ -1346,25 +1355,13 @@ export function ChatSidebar({
 						"flex items-center justify-between px-0 z-10",
 						isPageDesktop
 							? "relative shrink-0 pt-2 pb-1"
-							: "absolute top-0 right-0 left-0 pt-4 px-4",
+							: isMobile
+								? "relative shrink-0 px-4 pt-4 pb-2"
+								: "absolute top-0 right-0 left-0 pt-4 px-4",
 						!isMobile && !isPageDesktop && "rounded-t-2xl",
 					)}
 				>
 					<div className="mr-2 flex min-w-0 flex-1 items-center gap-2">
-						{layout === "page" && isMobile && (
-							<Button
-								type="button"
-								variant="headers"
-								className="h-10! w-10! shrink-0 cursor-pointer rounded-full border-[#73737333] bg-[#0D121A] p-0!"
-								style={{
-									boxShadow: "1.5px 1.5px 4.5px 0 rgba(0, 0, 0, 0.70) inset",
-								}}
-								onClick={() => setIsChatOpen(false)}
-								aria-label="Back to memories"
-							>
-								<ArrowLeft className="size-4 text-[#737373]" />
-							</Button>
-						)}
 						{!isStackedInput && (
 							<>
 								<ChatModelSelector
@@ -1376,6 +1373,7 @@ export function ChatSidebar({
 									onValueChange={setChatSpaceProjects}
 									variant="insideOut"
 									includeAuto
+									hideCount
 									triggerClassName="h-10 min-h-10 max-w-[min(192px,42vw)] border border-[#73737333] bg-[#0D121A] shadow-[1.5px_1.5px_4.5px_0_rgba(0,0,0,0.70)_inset]"
 								/>
 							</>
@@ -1414,7 +1412,7 @@ export function ChatSidebar({
 							messages.length > 0
 								? cn(
 										"flex flex-col space-y-3 min-h-full justify-end",
-										isPageDesktop ? "pt-2" : "pt-14",
+										isPageDesktop || isMobile ? "pt-2" : "pt-14",
 									)
 								: ""
 						}
@@ -1537,14 +1535,16 @@ export function ChatSidebar({
 				className={cn(
 					"shrink-0",
 					isStackedInput &&
-						"pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+1rem))] md:pb-6",
+						(isMobile
+							? "px-4 pb-2"
+							: "px-4 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+1rem))] md:pb-6"),
 				)}
 			>
 				<ChatInput
 					value={input}
 					onChange={(e) => setInput(e.target.value)}
 					onSend={handleSend}
-					onStop={stop}
+					onStop={handleStop}
 					onKeyDown={handleKeyDown}
 					isResponding={isResponding}
 					attachments={attachmentDrafts}
@@ -1578,6 +1578,7 @@ export function ChatSidebar({
 									onValueChange={setChatSpaceProjects}
 									variant="insideOut"
 									includeAuto
+									hideCount
 									triggerClassName="h-auto min-h-0 max-w-[min(160px,35vw)] rounded-full border border-[#161F2C] bg-[#000000] px-3 py-1.5 shadow-none hover:bg-[#05080D]"
 								/>
 							</>
@@ -1594,35 +1595,25 @@ export function ChatSidebar({
 			className={cn(
 				"relative flex flex-col backdrop-blur-md",
 				isMobile
-					? "fixed inset-0 z-50 m-0 h-dvh w-full rounded-none pb-safe"
+					? "flex h-full min-h-0 w-full flex-1 flex-col rounded-none"
 					: isPageDesktop
 						? "flex h-full min-h-0 w-full min-w-0 flex-1 flex-col basis-0 rounded-none border-x-0"
 						: "m-4 mt-2 w-[min(450px,calc(100vw-2rem))] md:w-[380px] lg:w-[450px] rounded-2xl",
 				dmSansClassName(),
 			)}
 			style={
-				isMobile
+				isMobile || isPageDesktop
 					? undefined
-					: isPageDesktop
-						? undefined
-						: {
-								height: `calc(100vh - ${heightOffset}px)`,
-							}
+					: {
+							height: `calc(100vh - ${heightOffset}px)`,
+						}
 			}
 			initial={
-				isMobile
-					? { y: "100%", opacity: 0 }
-					: layout === "page"
-						? { opacity: 0, y: 20 }
-						: { x: "100px", opacity: 0 }
+				layout === "page" ? { opacity: 0, y: 20 } : { x: "100px", opacity: 0 }
 			}
 			animate={{ x: 0, y: 0, opacity: 1 }}
 			exit={
-				isMobile
-					? { y: "100%", opacity: 0 }
-					: layout === "page"
-						? { opacity: 0, y: 12 }
-						: { x: "100px", opacity: 0 }
+				layout === "page" ? { opacity: 0, y: 12 } : { x: "100px", opacity: 0 }
 			}
 			transition={{ duration: 0.3, ease: "easeOut", bounce: 0 }}
 		>

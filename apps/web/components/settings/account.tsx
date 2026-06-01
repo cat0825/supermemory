@@ -4,15 +4,8 @@ import { dmSans125ClassName } from "@/lib/fonts"
 import { cn } from "@lib/utils"
 import { useAuth } from "@lib/auth-context"
 import { authClient } from "@lib/auth"
-import { useOrgSummaries } from "@/hooks/use-org-summaries"
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/components/avatar"
-import {
-	PLAN_DISPLAY_NAMES,
-	PLAN_RANK,
-	useTokenUsage,
-	type PlanType,
-} from "@/hooks/use-token-usage"
-import { Popover, PopoverContent, PopoverTrigger } from "@ui/components/popover"
+import { Popover, PopoverContent } from "@ui/components/popover"
 import {
 	Select,
 	SelectContent,
@@ -28,26 +21,25 @@ import {
 } from "@ui/components/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle } from "@ui/components/dialog"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { useCustomer } from "autumn-js/react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
-	Check,
 	LoaderIcon,
 	ChevronDown,
-	Building2,
 	Users,
 	UserPlus,
 	Mail,
 	MoreHorizontal,
 	UserMinus,
 	X,
+	Pencil,
 	Tag,
 	Plus,
 } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useContainerTags } from "@/hooks/use-container-tags"
 import { PopoverAnchor } from "@ui/components/popover"
+import { OrgContext } from "@/components/settings/org-context"
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
 	return (
@@ -76,25 +68,6 @@ function SettingsCard({ children }: { children: React.ReactNode }) {
 }
 
 /** Matches ACTIVE / RECOMMENDED pills in billing settings. */
-const orgPlanBadgeBase = cn(
-	dmSans125ClassName(),
-	"inline-flex h-[18px] min-w-[42px] shrink-0 items-center justify-center rounded-[3px] px-1.5 text-[10px] uppercase",
-)
-
-const ORG_PLAN_BADGE_STYLES: Record<PlanType, string> = {
-	free: "bg-[#2E353D] font-mono font-medium tracking-[0.12em] text-[#A3A3A3]",
-	pro: "bg-[#4BA0FA] font-bold tracking-[0.36px] text-[#00171A]",
-	scale: "bg-[#0054AD] font-bold tracking-[0.36px] text-[#FAFAFA]",
-	enterprise: "bg-[#FAFAFA] font-bold tracking-[0.36px] text-[#0D121A]",
-}
-
-function OrgPlanBadge({ plan }: { plan: PlanType }) {
-	return (
-		<span className={cn(orgPlanBadgeBase, ORG_PLAN_BADGE_STYLES[plan])}>
-			{PLAN_DISPLAY_NAMES[plan]}
-		</span>
-	)
-}
 
 const ROLE_LABELS: Record<string, string> = {
 	owner: "Owner",
@@ -152,29 +125,8 @@ function isPendingInvitation(invitation: {
 	return new Date(invitation.expiresAt).getTime() > Date.now()
 }
 
-function resolveOrgPlan(
-	orgId: string,
-	isCurrent: boolean,
-	currentPlan: PlanType,
-	planByOrgId: Map<string, PlanType>,
-): PlanType {
-	const fromSummary = planByOrgId.get(orgId)
-	if (fromSummary) return fromSummary
-	if (isCurrent) return currentPlan
-	return "free"
-}
-
 export default function Account() {
-	const {
-		user,
-		org,
-		organizations: allOrgs,
-		setActiveOrg,
-		refetchActiveOrg,
-	} = useAuth()
-	const autumn = useCustomer()
-	const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null)
-	const [orgMenuOpen, setOrgMenuOpen] = useState(false)
+	const { user, org, refetchActiveOrg, refetchOrganizations } = useAuth()
 	const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
 	const [inviteEmail, setInviteEmail] = useState("")
 	const [inviteRole, setInviteRole] = useState<InviteRole>("member")
@@ -186,6 +138,8 @@ export default function Account() {
 	>([])
 	const [tagQuery, setTagQuery] = useState("")
 	const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
+	const [isEditingOrgName, setIsEditingOrgName] = useState(false)
+	const [orgNameDraft, setOrgNameDraft] = useState("")
 	const tagInputRef = useRef<HTMLInputElement>(null)
 	const tagAnchorRef = useRef<HTMLDivElement>(null)
 	const { allProjects: allContainerTags } = useContainerTags()
@@ -204,28 +158,17 @@ export default function Account() {
 	const showAccessType = inviteRole === "member"
 	const showTagPicker =
 		inviteRole === "member" && inviteAccessType === "restricted"
-	const canSwitchOrg = (allOrgs?.length ?? 0) > 1
-	const { data: orgSummaries } = useOrgSummaries()
 
-	const handleOrgSwitch = async (orgSlug: string, orgId: string) => {
-		if (orgId === org?.id) return
-		setSwitchingOrgId(orgId)
-		try {
-			await setActiveOrg(orgSlug)
-			window.location.reload()
-		} catch (error) {
-			console.error("Failed to switch organization:", error)
-			setSwitchingOrgId(null)
-		}
-	}
-
-	const { currentPlan } = useTokenUsage(autumn)
+	useEffect(() => {
+		setOrgNameDraft(org?.name ?? "")
+		setIsEditingOrgName(false)
+	}, [org?.name])
 
 	const activeMemberRoleQuery = useQuery({
 		queryKey: ["organization", org?.id, "active-member-role"],
 		queryFn: async () => {
 			if (!org?.id) return null
-			const result = await authClient.organization.getActiveMemberRole({
+			const result = await authClient.organization.getActiveMember({
 				query: { organizationId: org.id },
 			})
 			if (result.error) {
@@ -376,40 +319,50 @@ export default function Account() {
 		},
 	})
 
+	const updateOrgNameMutation = useMutation({
+		mutationFn: async (name: string) => {
+			if (!org?.id) throw new Error("No active organization")
+			const trimmed = name.trim()
+			if (!trimmed) throw new Error("Enter an organization name")
+			const result = await authClient.organization.update({
+				organizationId: org.id,
+				data: { name: trimmed },
+			})
+			if (result.error) {
+				throw new Error(
+					result.error.message ?? "Failed to update organization name",
+				)
+			}
+			return trimmed
+		},
+		onSuccess: async (name) => {
+			setOrgNameDraft(name)
+			setIsEditingOrgName(false)
+			await Promise.all([refetchActiveOrg(), refetchOrganizations()])
+			toast.success("Organization name updated")
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error, "Failed to update organization name"))
+		},
+	})
+
 	const handleInviteSubmit = (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
 		if (!canManageTeam || inviteMemberMutation.isPending) return
 		inviteMemberMutation.mutate()
 	}
 
-	const planByOrgId = useMemo(() => {
-		const map = new Map<string, PlanType>()
-		for (const summary of orgSummaries ?? []) {
-			map.set(summary.orgId, summary.plan)
+	const handleOrgNameSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+		event.preventDefault()
+		if (!canManageTeam || updateOrgNameMutation.isPending) return
+		const trimmed = orgNameDraft.trim()
+		if (!trimmed || trimmed === org?.name) {
+			setOrgNameDraft(org?.name ?? "")
+			setIsEditingOrgName(false)
+			return
 		}
-		return map
-	}, [orgSummaries])
-
-	const sortedOrgsForMenu = useMemo(() => {
-		if (!allOrgs?.length) return []
-		return [...allOrgs].sort((a, b) => {
-			const planA = resolveOrgPlan(
-				a.id,
-				a.id === org?.id,
-				currentPlan,
-				planByOrgId,
-			)
-			const planB = resolveOrgPlan(
-				b.id,
-				b.id === org?.id,
-				currentPlan,
-				planByOrgId,
-			)
-			const rankDiff = PLAN_RANK[planB] - PLAN_RANK[planA]
-			if (rankDiff !== 0) return rankDiff
-			return a.name.localeCompare(b.name)
-		})
-	}, [allOrgs, org?.id, currentPlan, planByOrgId])
+		updateOrgNameMutation.mutate(trimmed)
+	}
 
 	const memberSince = user?.createdAt
 		? new Date(user.createdAt).toLocaleDateString("en-US", {
@@ -425,7 +378,7 @@ export default function Account() {
 				<SettingsCard>
 					<div className="flex flex-col gap-6">
 						{/* Avatar + Name/Email */}
-						<div className="flex items-center gap-4">
+						<div className="flex min-w-0 items-center gap-4">
 							<div className="relative size-16 rounded-full bg-linear-to-b from-[#0D121A] to-black overflow-hidden shrink-0">
 								<Avatar className="size-full">
 									<AvatarImage
@@ -438,11 +391,11 @@ export default function Account() {
 									</AvatarFallback>
 								</Avatar>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<p
 									className={cn(
 										dmSans125ClassName(),
-										"font-semibold text-[20px] tracking-[-0.2px] text-[#FAFAFA]",
+										"truncate font-semibold text-[20px] tracking-[-0.2px] text-[#FAFAFA]",
 									)}
 								>
 									{user?.name ?? "—"}
@@ -450,7 +403,7 @@ export default function Account() {
 								<p
 									className={cn(
 										dmSans125ClassName(),
-										"font-medium text-[16px] tracking-[-0.16px] text-[#FAFAFA]",
+										"truncate font-medium text-[16px] tracking-[-0.16px] text-[#FAFAFA]",
 									)}
 								>
 									{user?.email ?? "—"}
@@ -458,8 +411,8 @@ export default function Account() {
 							</div>
 						</div>
 
-						<div className="flex gap-4">
-							<div className="flex-1 flex flex-col gap-2">
+						<div className="flex flex-col gap-4 sm:flex-row">
+							<div className="flex min-w-0 flex-1 flex-col gap-2">
 								<p
 									className={cn(
 										dmSans125ClassName(),
@@ -468,88 +421,87 @@ export default function Account() {
 								>
 									Organization
 								</p>
-								<Popover
-									open={orgMenuOpen && canSwitchOrg}
-									onOpenChange={(open) => {
-										if (canSwitchOrg) setOrgMenuOpen(open)
-									}}
-								>
-									<PopoverTrigger
-										disabled={!canSwitchOrg}
-										className={cn(
-											"flex items-center gap-2 transition-opacity",
-											canSwitchOrg
-												? "cursor-pointer hover:opacity-90"
-												: "cursor-default",
-											dmSans125ClassName(),
-										)}
+								{isEditingOrgName ? (
+									<form
+										onSubmit={handleOrgNameSubmit}
+										className="flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[360px]"
 									>
+										<input
+											value={orgNameDraft}
+											onChange={(event) => setOrgNameDraft(event.target.value)}
+											disabled={updateOrgNameMutation.isPending}
+											maxLength={80}
+											className={cn(
+												dmSans125ClassName(),
+												"h-9 min-w-0 flex-1 rounded-[9px] border border-white/10 bg-black/30 px-3 text-[14px] font-medium tracking-[-0.14px] text-[#FAFAFA] outline-none transition-colors placeholder:text-[#525252] focus:border-[#4BA0FA]/60",
+											)}
+											placeholder="Organization name"
+										/>
+										<div className="flex shrink-0 items-center gap-1">
+											<button
+												type="submit"
+												disabled={
+													updateOrgNameMutation.isPending ||
+													!orgNameDraft.trim() ||
+													orgNameDraft.trim() === org?.name
+												}
+												className={cn(
+													dmSans125ClassName(),
+													"inline-flex h-8 items-center justify-center gap-1 rounded-full border border-transparent bg-[#0D121A] px-2.5 text-[11px] font-semibold text-[#FAFAFA] shadow-[inset_1.5px_1.5px_4.5px_rgba(0,0,0,0.7)] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50",
+												)}
+											>
+												{updateOrgNameMutation.isPending ? (
+													<LoaderIcon className="size-3 animate-spin" />
+												) : null}
+												Save
+											</button>
+											<button
+												type="button"
+												disabled={updateOrgNameMutation.isPending}
+												aria-label="Cancel organization name edit"
+												title="Cancel"
+												onClick={() => {
+													setOrgNameDraft(org?.name ?? "")
+													setIsEditingOrgName(false)
+												}}
+												className={cn(
+													"inline-flex size-8 items-center justify-center rounded-full bg-[#0D121A] text-[#737373] shadow-inside-out transition-colors hover:text-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50",
+												)}
+											>
+												<X className="size-3.5" />
+											</button>
+										</div>
+									</form>
+								) : (
+									<div className="flex min-w-0 max-w-full items-center gap-2">
 										<span
 											className={cn(
 												dmSans125ClassName(),
-												"font-medium text-[16px] tracking-[-0.16px] text-[#FAFAFA]",
+												"truncate font-medium text-[16px] tracking-[-0.16px] text-[#FAFAFA]",
 											)}
 										>
 											{org?.name ?? "Personal"}
 										</span>
-										{canSwitchOrg && (
-											<ChevronDown className="size-4 text-[#737373]" />
-										)}
-									</PopoverTrigger>
-									{canSwitchOrg && (
-										<PopoverContent
-											align="start"
-											className="w-80 max-h-80 overflow-y-auto bg-[#1B1F24] rounded-[12px] border-white/10 p-1.5 shadow-[0px_4px_16px_rgba(0,0,0,0.4)]"
-										>
-											{sortedOrgsForMenu.map((organization) => {
-												const isCurrent = organization.id === org?.id
-												const isSwitching = switchingOrgId === organization.id
-												const plan = resolveOrgPlan(
-													organization.id,
-													isCurrent,
-													currentPlan,
-													planByOrgId,
-												)
-												return (
-													<button
-														key={organization.id}
-														type="button"
-														disabled={isCurrent || isSwitching}
-														onClick={() =>
-															handleOrgSwitch(
-																organization.slug,
-																organization.id,
-															)
-														}
-														className={cn(
-															"w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] text-left transition-colors",
-															isCurrent
-																? "bg-white/5"
-																: "hover:bg-white/5 cursor-pointer",
-															"disabled:opacity-60 disabled:cursor-default",
-															dmSans125ClassName(),
-														)}
-													>
-														<Building2 className="size-4 text-[#737373] shrink-0" />
-														<p className="min-w-0 flex-1 truncate text-[14px] tracking-[-0.14px] text-[#FAFAFA]">
-															{organization.name}
-														</p>
-														{isSwitching ? (
-															<LoaderIcon className="size-4 shrink-0 animate-spin text-[#4BA0FA]" />
-														) : isCurrent ? (
-															<Check className="size-4 shrink-0 text-[#4BA0FA]" />
-														) : (
-															<span className="size-4 shrink-0" aria-hidden />
-														)}
-														<OrgPlanBadge plan={plan} />
-													</button>
-												)
-											})}
-										</PopoverContent>
-									)}
-								</Popover>
+										{canManageTeam ? (
+											<button
+												type="button"
+												aria-label="Edit organization name"
+												title="Edit organization name"
+												onClick={() => {
+													setOrgNameDraft(org?.name ?? "")
+													setIsEditingOrgName(true)
+												}}
+												className={cn(
+													"inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[#FAFAFA] transition-colors hover:bg-white/5",
+												)}
+											>
+												<Pencil className="size-3.5" />
+											</button>
+										) : null}
+									</div>
+								)}
 							</div>
-							<div className="flex-1 flex flex-col gap-2">
+							<div className="flex min-w-0 flex-1 flex-col gap-2">
 								<p
 									className={cn(
 										dmSans125ClassName(),
@@ -571,6 +523,8 @@ export default function Account() {
 					</div>
 				</SettingsCard>
 			</section>
+
+			<OrgContext />
 
 			<section id="team-members" className="flex flex-col gap-4">
 				<div className="flex flex-wrap items-center justify-between gap-3 px-2">
@@ -1206,6 +1160,13 @@ export default function Account() {
 									!org?.id ||
 									inviteMemberMutation.isPending ||
 									(showTagPicker && inviteAssignments.length === 0)
+								}
+								title={
+									showTagPicker && inviteAssignments.length === 0
+										? "Select at least one space for restricted access"
+										: !inviteEmail.trim()
+											? "Enter an email address to send an invite"
+											: undefined
 								}
 								className={cn(
 									dmSans125ClassName(),

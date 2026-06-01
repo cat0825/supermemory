@@ -64,8 +64,10 @@ export default function ChatInput({
 }: ChatInputProps) {
 	const [isMultiline, setIsMultiline] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
+	const [isDraggingFiles, setIsDraggingFiles] = useState(false)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const fileInputRef = useRef<HTMLInputElement>(null)
+	const dragDepthRef = useRef(0)
 
 	useEffect(() => {
 		if (!showStatusStrip && isExpanded) {
@@ -91,6 +93,43 @@ export default function ChatInput({
 		const files = e.target.files
 		if (files?.length) onAddAttachmentFiles?.(files)
 		e.target.value = ""
+	}
+
+	const canAttachFiles = Boolean(onAddAttachmentFiles) && !isResponding
+	const hasDraggedFiles = (e: React.DragEvent) =>
+		Array.from(e.dataTransfer.types).includes("Files")
+
+	const handleDragEnter = (e: React.DragEvent) => {
+		if (!hasDraggedFiles(e)) return
+		e.preventDefault()
+		e.stopPropagation()
+		dragDepthRef.current += 1
+		if (canAttachFiles) setIsDraggingFiles(true)
+	}
+
+	const handleDragOver = (e: React.DragEvent) => {
+		if (!hasDraggedFiles(e)) return
+		e.preventDefault()
+		e.stopPropagation()
+		e.dataTransfer.dropEffect = canAttachFiles ? "copy" : "none"
+	}
+
+	const handleDragLeave = (e: React.DragEvent) => {
+		if (!hasDraggedFiles(e)) return
+		e.preventDefault()
+		e.stopPropagation()
+		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+		if (dragDepthRef.current === 0) setIsDraggingFiles(false)
+	}
+
+	const handleDrop = (e: React.DragEvent) => {
+		if (!hasDraggedFiles(e)) return
+		e.preventDefault()
+		e.stopPropagation()
+		dragDepthRef.current = 0
+		setIsDraggingFiles(false)
+		const files = e.dataTransfer.files
+		if (canAttachFiles && files.length) onAddAttachmentFiles?.(files)
 	}
 
 	const showAttachments = attachments.length > 0
@@ -132,6 +171,12 @@ export default function ChatInput({
 				<PaperclipIcon className="size-4" />
 			</button>
 		</>
+	) : null
+
+	const dropOverlay = isDraggingFiles ? (
+		<div className="pointer-events-none absolute inset-1 z-10 grid place-items-center rounded-lg border border-dashed border-[#4B5563] bg-black/70 text-sm font-medium text-fg-primary backdrop-blur-sm">
+			Drop files to attach
+		</div>
 	) : null
 
 	return (
@@ -202,7 +247,15 @@ export default function ChatInput({
 				</>
 			) : null}
 			{stackedToolbar ? (
-				<div className="flex flex-col gap-2 rounded-xl bg-surface-card/60 backdrop-blur-md p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10">
+				<fieldset
+					aria-label="Chat input with file drop zone"
+					onDragEnter={handleDragEnter}
+					onDragOver={handleDragOver}
+					onDragLeave={handleDragLeave}
+					onDrop={handleDrop}
+					className="relative m-0 flex min-w-0 flex-col gap-2 rounded-xl border-0 bg-surface-card/60 p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] backdrop-blur-md transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10"
+				>
+					{dropOverlay}
 					{attachmentTray}
 					<textarea
 						ref={textareaRef}
@@ -228,14 +281,20 @@ export default function ChatInput({
 							)}
 						</div>
 					</div>
-				</div>
+				</fieldset>
 			) : (
-				<div
+				<fieldset
+					aria-label="Chat input with file drop zone"
+					onDragEnter={handleDragEnter}
+					onDragOver={handleDragOver}
+					onDragLeave={handleDragLeave}
+					onDrop={handleDrop}
 					className={cn(
-						"flex flex-col gap-2 rounded-xl bg-surface-card/60 backdrop-blur-md p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10",
+						"relative m-0 flex min-w-0 flex-col gap-2 rounded-xl border-0 bg-surface-card/60 p-2 shadow-[0_16px_48px_rgba(0,0,0,0.34)] backdrop-blur-md transition-all duration-200 focus-within:ring-1 focus-within:ring-fg-primary/10",
 						isMultiline && "flex-col",
 					)}
 				>
+					{dropOverlay}
 					{attachmentTray}
 					<textarea
 						ref={textareaRef}
@@ -256,7 +315,7 @@ export default function ChatInput({
 							<SendButton onClick={onSend} disabled={!sendEnabled} />
 						)}
 					</div>
-				</div>
+				</fieldset>
 			)}
 		</motion.div>
 	)
